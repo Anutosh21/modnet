@@ -1,0 +1,10 @@
+{
+  "model": "https://github.com/ZHKKKe/MODNet/tree/28165a451e4610c9d77cfdf925a94610bb2810fb",
+  "architecture_adaptation": "Original model files unchanged; imported as the local modnet_models package.",
+  "checkpoint": "https://huggingface.co/boopathiraj/MODNet/resolve/a967175f8fd63de67a1c161d8daac966d2b57e3a/modnet/pretrained/modnet_photographic_portrait_matting.ckpt",
+  "checkpoint_sha256": "7c22235f0925deba15d4d63e53afcb654c47055bbcd98f56e393ab2584007ed8",
+  "portrait": "https://raw.githubusercontent.com/scikit-image/scikit-image/v0.25.2/skimage/data/astronaut.png",
+  "portrait_sha256": "88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5",
+  "portrait_credit": "NASA, Eileen Collins; public domain.",
+  "inspiration": "https://executorch.ai/playground/"
+}

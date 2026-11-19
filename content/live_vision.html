@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live portrait matting</title>
+<style>
+:root{font:15px system-ui,sans-serif;color:#e8eef5;color-scheme:dark}
+body{margin:0;background:#132132;padding:20px}h2{margin:0 0 8px;font-size:23px}
+p{line-height:1.5;color:#bdccdc;margin:10px 0}.controls{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+button,select{font:inherit;background:#253c55;border:1px solid #547089;color:#fff;padding:9px 12px;border-radius:7px;cursor:pointer}
+button:disabled{opacity:.45;cursor:default}#start{background:#126b60}#stop{background:#684038}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.panel{min-width:0}.label{font-size:12px;color:#aac1d8;margin-bottom:7px;font-weight:650;letter-spacing:.06em}
+canvas{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background-color:#17283a;background-image:conic-gradient(#23374b 25%,transparent 0 50%,#23374b 0 75%,transparent 0);background-size:24px 24px;border-radius:9px}
+#stats{font:13px/1.7 ui-monospace,monospace;white-space:pre-wrap;color:#9fe7cb;min-height:54px}#status{min-height:24px}
+.note{font-size:12px}video{display:none}input[type=file]{display:none}.error{color:#ffb0a1}
+#compare-stage{position:relative;aspect-ratio:4/3;width:100%;max-width:calc(420px * var(--ratio, 1.333333));margin:0 auto;border-radius:9px;overflow:hidden}
+#compare{width:100%;height:100%;aspect-ratio:auto}.tag{position:absolute;top:12px;padding:5px 10px;border-radius:20px;background:#101e30d9;font-size:12px;pointer-events:none}.left{left:12px}.right{right:12px}
+#split{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;z-index:2;margin:0;touch-action:none}
+#divider{position:absolute;left:50%;top:0;height:100%;width:2px;background:#fff;pointer-events:none;transform:translateX(-1px)}
+#divider::after{content:'↔';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:white;color:#17283a;font-size:22px}
+#compare-stage:focus-within{outline:3px solid #79bcff;outline-offset:3px}[hidden]{display:none!important}
+@media(max-width:620px){.grid{grid-template-columns:1fr}body{padding:12px}}
+</style>
+<h2>Your camera, a PyTorch model, and a new background</h2>
+<p id="caption"></p>
+<div class="controls"><button id="start">Start camera</button><button id="stop" disabled>Stop camera</button>
+<button id="sample">Try the sample photo</button><button id="upload">Upload a photo</button>
+<select id="effect" aria-label="Background effect"><option value="cutout">Remove background</option><option value="blur">Background blur</option>
+<option value="color">Teal background</option><option value="colorpop">Colour pop</option>
+<option value="pixelate">Pixelated background</option><option value="matte">Foreground matte</option></select>
+<select id="view" aria-label="Comparison view"><option value="compare">Before / after slider</option><option value="side">Side by side</option></select>
+<button id="save" disabled>Save result PNG</button>
+<input type="file" id="file" accept="image/*"></div>
+<div id="compare-stage"><canvas id="compare" width="640" height="480"></canvas><span class="tag left">Original</span><span id="result-tag" class="tag right">Cutout</span>
+<div id="divider"></div><input id="split" type="range" min="0" max="100" value="50" aria-label="Before and after comparison" aria-valuetext="50 percent original"></div>
+<div class="grid" id="side-by-side" hidden><section class="panel"><div class="label">INPUT FRAME</div><canvas id="original" width="640" height="480"></canvas></section>
+<section class="panel"><div class="label">MODEL RESULT</div><canvas id="output" width="640" height="480"></canvas></section></div>
+<video id="video" autoplay playsinline muted></video>
+<p id="status" role="status">Ready. Try the sample or start your camera.</p><div id="stats"></div>
+<p class="note">Camera access starts only when you click Start. Stop releases the camera. One frame runs at a time;
+the next frame is captured after its result arrives. The rate below measures completed updates, including Python and image transfers.
+Your frames stay in this tab. Keep this notebook open while the camera is running.</p>
+<script type="module">
+const payload = __VISION_PAYLOAD__;
+const $ = id => document.getElementById(id);
+const channel = new BroadcastChannel(payload.channel);
+const capture = document.createElement('canvas'), ctx = capture.getContext('2d');
+const evidence = {ready:true,frames:[],errors:[],running:false,inFlight:0,maxInFlight:0,tracks:[],closed:false};
+window.liveVision = evidence;
+let stream = null, running = false, closed = false, pending = null, serial = 0, generation = 0;
+let still = null, timer = null;
+let lastPNG = null, lastCompletedAt = null;
+$('caption').textContent = `Original MODNet · ${payload.size} × ${payload.size} model input · ${payload.device.toUpperCase()} · compiled in this tab`;
+
+function status(text, error=false){$('status').textContent=text;$('status').className=error?'error':'';}
+function buttons(){
+  $('start').disabled=closed||running||!!pending;
+  $('stop').disabled=!running;
+  $('sample').disabled=closed||running||!!pending;
+  $('upload').disabled=closed||running||!!pending;
+  $('effect').disabled=closed;
+}
+function stopCamera(message='Camera stopped. The last result stays here.'){
+  running=false;evidence.running=false;generation++;
+  if(stream)for(const track of stream.getTracks())track.stop();
+  stream=null;$('video').srcObject=null;buttons();status(message);
+}
+async function drawURI(canvas, uri){
+  const image=new Image();image.src=uri;await image.decode();
+  canvas.width=image.width;canvas.height=image.height;
+  canvas.getContext('2d').drawImage(image,0,0);
+}
+function fit(source){
+  const w=source.videoWidth||source.width, h=source.videoHeight||source.height;
+  const scale=Math.min(1,640/w,480/h);
+  capture.width=Math.max(1,Math.round(w*scale));capture.height=Math.max(1,Math.round(h*scale));
+  ctx.drawImage(source,0,0,capture.width,capture.height);
+  return capture.toDataURL('image/jpeg',.92);
+}
+function submit(source){
+  if(closed||pending)return;
+  const started=performance.now();
+  const uri=fit(source);
+  pending={id:++serial,started,generation,uri};
+  evidence.inFlight=1;evidence.maxInFlight=Math.max(evidence.maxInFlight,1);
+  channel.postMessage({kind:'frame',id:pending.id,jpeg:uri.split(',')[1],effect:$('effect').value});
+  timer=setTimeout(()=>{
+    if(pending){evidence.errors.push('Frame timed out');stopCamera('Frame timed out. Restart the kernel before trying again.');closed=true;evidence.closed=true;buttons();}
+  },60000);
+  buttons();status('Processing a frame in Python…');
+}
+async function sample(){
+  if(pending||running||closed)return;
+  try{const image=new Image();image.src='data:image/png;base64,'+payload.sample;await image.decode();still=image;submit(still);}
+  catch(error){status(error.message,true);evidence.errors.push(error.message);}
+}
+$('start').onclick=async()=>{
+  if(running||pending||closed)return;
+  delete evidence.cameraError;
+  const requestedGeneration=++generation;$('start').disabled=true;
+  try{
+    const acquired=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'},audio:false});
+    if(closed||generation!==requestedGeneration){for(const t of acquired.getTracks())t.stop();return;}
+    stream=acquired;evidence.tracks.push(...stream.getTracks());
+    $('video').srcObject=stream;await $('video').play();
+    if(closed||generation!==requestedGeneration){stopCamera();return;}
+    running=true;evidence.running=true;lastCompletedAt=null;buttons();submit($('video'));
+  }catch(error){stopCamera('Camera unavailable. Try the sample or upload a photo.');status(error.message+' — try the sample or upload a photo.',true);evidence.cameraError=error.message;}
+};
+$('stop').onclick=()=>stopCamera();$('sample').onclick=sample;
+$('save').onclick=()=>{if(lastPNG){const a=document.createElement('a');a.href=lastPNG;a.download='portrait-result.png';a.click();}};
+$('upload').onclick=()=>$('file').click();
+$('file').onchange=async()=>{
+  const file=$('file').files[0];if(!file||running||pending||closed)return;
+  const url=URL.createObjectURL(file);
+  try{const image=new Image();image.src=url;await image.decode();still=image;submit(still);}
+  catch(error){status('Could not open that image: '+error.message,true);}
+  finally{URL.revokeObjectURL(url);$('file').value='';}
+};
+$('effect').onchange=()=>{if(!running&&still&&!pending)submit(still);};
+function paintComparison(){
+  const original=$('original'),output=$('output'),canvas=$('compare');
+  if(canvas.width!==original.width||canvas.height!==original.height){canvas.width=original.width;canvas.height=original.height;}
+  $('compare-stage').style.aspectRatio=`${original.width}/${original.height}`;
+  $('compare-stage').style.setProperty('--ratio',original.width/original.height);
+  const g=canvas.getContext('2d'),split=Number($('split').value)/100;
+  g.clearRect(0,0,canvas.width,canvas.height);g.drawImage(output,0,0);
+  g.save();g.beginPath();g.rect(0,0,canvas.width*split,canvas.height);g.clip();g.drawImage(original,0,0);g.restore();
+  $('divider').style.left=(split*100)+'%';
+  $('split').setAttribute('aria-valuetext',`${Math.round(split*100)} percent original`);
+}
+$('split').oninput=paintComparison;
+$('view').onchange=()=>{$('compare-stage').hidden=$('view').value!=='compare';$('side-by-side').hidden=$('view').value!=='side';};
+channel.onmessage=async({data})=>{
+  if(data.kind==='closed'){stopCamera('Panel closed. Run its notebook cell again to reopen it.');closed=true;evidence.closed=true;buttons();channel.close();return;}
+  if(data.kind!=='result'||!pending||data.id!==pending.id)return;
+  clearTimeout(timer);timer=null;
+  const request=pending;
+  if(data.error){pending=null;evidence.inFlight=0;evidence.errors.push(data.error);stopCamera();status(data.error,true);return;}
+  try{
+    if(request.generation===generation&&!closed){
+      await Promise.all([drawURI($('original'),request.uri),drawURI($('output'),'data:image/png;base64,'+data.png)]);
+      lastPNG='data:image/png;base64,'+data.png;$('save').disabled=false;
+      paintComparison();$('result-tag').textContent=data.effect==='cutout'?'Cutout':'Result';
+      const now=performance.now(),total=now-request.started;
+      const interval=running&&lastCompletedAt!==null?now-lastCompletedAt:total;
+      lastCompletedAt=now;
+      const record={id:data.id,...data.timings,roundtrip_ms:total,completed_fps:1000/interval,effect:data.effect};
+      evidence.frames.push(record);if(evidence.frames.length>120)evidence.frames.shift();
+      $('stats').textContent=(running?`${record.completed_fps.toFixed(1)} completed updates/s · `:'')+`${total.toFixed(1)} ms/frame\n`+
+        `prepare ${record.prepare_ms.toFixed(1)} · model + transfers ${record.model_ms.toFixed(1)} · OpenCV effect ${record.effect_ms.toFixed(1)} · encode ${record.encode_ms.toFixed(1)} ms`;
+      status(running?'Live. Every result comes from the compiled PyTorch model.':'Photo processed. Try another effect or start your camera.');
+    }
+  }catch(error){evidence.errors.push(error.message);stopCamera();status(error.message,true);}
+  finally{pending=null;evidence.inFlight=0;buttons();}
+  if(running&&!closed)requestAnimationFrame(()=>{if(running)submit($('video'));});
+};
+function dispose(){stopCamera();closed=true;evidence.closed=true;clearTimeout(timer);channel.close();}
+addEventListener('pagehide',dispose);
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&running)stopCamera('Camera paused while this panel is hidden. Click Start to resume.');});
+buttons();
+</script></html>

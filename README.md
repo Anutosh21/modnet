@@ -1,83 +1,25 @@
-# Xeus-Lite demo
+# Let's change our camera's background in a notebook
 
-[![lite-badge](https://jupyterlite.rtfd.io/en/latest/_static/badge.svg)](https://jupyterlite.github.io/xeus-lite-demo/notebooks/?path=demo.ipynb)
+Try the included portrait or turn on your camera. Remove the background, blur it,
+change its colour, or view the foreground mask. Your photos and camera frames stay
+in this browser.
 
-This GitHub template allows you to create deployments of JupyterLite with a custom set of conda packages.
+- [Open the WebGPU notebook](https://anutosh21.github.io/modnet/lab/index.html?path=live-camera-webgpu.ipynb)
+- [Open the CPU notebook](https://anutosh21.github.io/modnet/lab/index.html?path=live-camera-cpu.ipynb)
 
-## 💡 How to make your own deployment
+Run the cells from top to bottom in a fresh kernel, then click **Start camera** and
+allow access. You can also use the sample portrait or upload a photo. Run one
+notebook at a time when comparing CPU and WebGPU.
 
-Creating a new deployment can be done in three easy steps:
+PyTorch, compilation and model execution run in your browser. The model code,
+pretrained weights and sample portrait are included in `content/`.
 
-**Step 1: Apply the GitHub template**
+Shoutout to [MODNet](https://github.com/ZHKKKe/MODNet) and the
+[ExecuTorch background-removal demo](https://executorch.ai/playground/webgpu/#/demo/bgremove)
+for the inspiration! Built from the
+[Xeus-Lite template](https://github.com/jupyterlite/xeus-lite-demo).
 
-1. Click the **"Use this template"** button in the upper right corner of the GitHub repository.
-2. Choose a name for your project and select the GitHub organization where you want to create it.
-3. Then hit **"Create repository from template"** to finalize the setup.
+The portrait shows Eileen Collins: NASA, public domain. Model licensing and source
+details are in `content/LICENSE-MODNet` and `content/sources.json`.
 
-**Step 2: Enable building the GitHub pages from GitHub actions.**
-
-1. Once your repository is created, enable GitHub Pages by configuring GitHub Actions. This will build and deploy your site automatically.
-2. Your deployment will be accessible at the following URL: https://{USERNAME}.github.io/{DEMO_REPO_NAME}.
-
-**Step 3: Customize your conda environment**
-
-1. Update your ``environment.yml`` file to include the required packages.
-2. This ensures that your environment has all the necessary dependencies.
-
-## 🎬 Visual Guide
-
-For a step-by-step visual guide, check out the screencast below:
-
-![Deploy your own](deploy.gif)
-
-## 📦 How to install kernels and packages
-
-You can install specific kernels and extra packages by adding them to the ``environment.yml`` file.
-
-See https://jupyterlite-xeus.readthedocs.io/en/latest/environment.html for more documentation.
-
-### Example 1: JupyterLite with NumPy and Matplotlib
-
-To create a JupyterLite deployment with NumPy and Matplotlib pre-installed, edit the ``environment.yml`` file as follows:
-
-```yml
-name: xeus-kernel
-channels:
-  - https://repo.prefix.dev/emscripten-forge-dev
-  - https://repo.prefix.dev/conda-forge
-dependencies:
-  - xeus-python
-  - numpy
-  - matplotlib
-```
-
-### Example 2: JupyterLite with R and coursekata
-
-To use the R kernel and the coursekata package, edit the environment.yml file as follows:
-
-```yml
-name: xeus-kernel
-channels:
-  - https://repo.prefix.dev/emscripten-forge-dev
-  - https://repo.prefix.dev/conda-forge
-dependencies:
-  - xeus-r
-  - r-coursekata
-```
-
-### Example 3: JupyterLite with C++
-
-To use the C++ kernel, edit the environment.yml file as follows:
-
-```yml
-name: xeus-kernel
-channels:
-  - https://repo.prefix.dev/emscripten-forge-dev
-  - https://repo.prefix.dev/conda-forge
-dependencies:
-  - xeus-cpp
-```
-
-## 📦 How to install other jupyterlite plugins
-
-If you want to install jupyterlite plugins, e.g. `jupyterlite-terminal`, add those plugins to the `.github/build-environment.yml` file.
+To deploy, set **Settings → Pages → Source → GitHub Actions**, then push to `main`.
