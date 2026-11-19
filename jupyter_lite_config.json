@@ -1,0 +1,6 @@
+{
+  "XeusAddon": {
+    "platform": "emscripten-wasm64",
+    "mount_jupyterlite_content": true
+  }
+}
