@@ -6,5 +6,10 @@
   "portrait": "https://raw.githubusercontent.com/scikit-image/scikit-image/v0.25.2/skimage/data/astronaut.png",
   "portrait_sha256": "88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5",
   "portrait_credit": "NASA, Eileen Collins; public domain.",
-  "inspiration": "https://executorch.ai/playground/"
+  "inspiration": "https://executorch.ai/playground/",
+  "runtime_download": {
+    "url": "https://raw.githubusercontent.com/Anutosh21/modnet/1f5f74af269dc755d865ee1cbeef349ea948b971/content/modnet_photographic_portrait_matting.ckpt",
+    "sha256": "7c22235f0925deba15d4d63e53afcb654c47055bbcd98f56e393ab2584007ed8",
+    "cache": "Browser Cache Storage; SHA-256 verified on every load."
+  }
 }
