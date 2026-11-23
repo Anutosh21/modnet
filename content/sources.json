@@ -10,6 +10,8 @@
   "runtime_download": {
     "url": "https://raw.githubusercontent.com/Anutosh21/modnet/1f5f74af269dc755d865ee1cbeef349ea948b971/content/modnet_photographic_portrait_matting.ckpt",
     "sha256": "7c22235f0925deba15d4d63e53afcb654c47055bbcd98f56e393ab2584007ed8",
-    "cache": "Browser Cache Storage; SHA-256 verified on every load."
-  }
+    "cache": "Browser Cache Storage; SHA-256 verified on every load.",
+    "when": "Fallback only when the bundled checkpoint is absent."
+  },
+  "bundled_checkpoint": "modnet_photographic_portrait_matting.ckpt"
 }

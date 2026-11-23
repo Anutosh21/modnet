@@ -1,6 +1,7 @@
-"""Download the original checkpoint and reuse its verified browser cache entry."""
+"""Load the bundled checkpoint, with a download fallback when it is absent."""
 
 import io
+from pathlib import Path
 
 import pyjs
 import torch
@@ -39,7 +40,13 @@ _FETCH = '''async (url, expectedHash, cacheName) => {
 
 
 async def load_checkpoint():
-    """Load the unchanged FP32 checkpoint, downloading only on a cache miss."""
+    """Load the original FP32 checkpoint from the bundle when available."""
+    checkpoint = Path(__file__).with_name(
+        'modnet_photographic_portrait_matting.ckpt')
+    if checkpoint.is_file():
+        print('Loading bundled pretrained weights.', flush=True)
+        return torch.load(checkpoint, map_location='cpu', weights_only=True)
+
     print('Loading pretrained weights (first download: 25.0 MiB)...', flush=True)
     result = await pyjs.js.eval(_FETCH)(WEIGHTS_URL, SHA256, CACHE_NAME)
     if pyjs.to_py(result.cached):
